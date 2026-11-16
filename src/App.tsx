@@ -60,10 +60,51 @@ const AppContent: React.FC = () => {
   );
 };
 
+class AppErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; errorMessage: string }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, errorMessage: '' };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, errorMessage: error?.message || 'Terjadi kesalahan saat memuat aplikasi.' };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('Uncaught UI error:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4 font-['Plus_Jakarta_Sans',sans-serif]">
+          <div className="max-w-md w-full bg-white rounded-2xl border border-rose-200 p-6 shadow-sm space-y-3 text-center">
+            <h2 className="text-base font-bold text-[#032448]">Aplikasi Mengalami Kendala Tampilan</h2>
+            <p className="text-xs text-slate-600 break-words">{this.state.errorMessage}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 rounded-xl bg-[#032448] text-white text-xs font-bold cursor-pointer hover:bg-[#1F3A5F]"
+            >
+              Muat Ulang Halaman
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <AppErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </AppErrorBoundary>
   );
 }
