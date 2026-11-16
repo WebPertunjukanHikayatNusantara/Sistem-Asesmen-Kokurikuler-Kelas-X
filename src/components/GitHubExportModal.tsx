@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
 import {
-  Download,
   FolderArchive,
   ExternalLink,
   Copy,
   CheckCircle2,
   X,
   Sparkles,
-  ArrowRight,
   ShieldCheck,
-  Code2
+  Globe
 } from 'lucide-react';
 
 interface GitHubExportModalProps {
@@ -49,151 +47,123 @@ export const GitHubExportModal: React.FC<GitHubExportModalProps> = ({
               <FolderArchive className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold">Ekspor & Upload Proyek ke GitHub</h3>
+              <h3 className="text-lg font-bold">Panduan Push &amp; Hosting GitHub</h3>
               <p className="text-xs text-blue-200/80">
-                Solusi mudah tanpa perlu menjalankan perintah terminal yang rumit.
+                Konfigurasi Vite (`base: &apos;./&apos;`) dan GitHub Actions Pages sudah disiapkan di proyek.
               </p>
             </div>
           </div>
         </div>
 
         {/* Content Body */}
-        <div className="p-6 space-y-6 overflow-y-auto text-slate-800 text-xs leading-relaxed">
-          {/* Quick Download Banner */}
-          <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900 mb-1.5">
-                <Sparkles className="w-3 h-3 text-amber-700" />
-                Paket Siap Pakai
-              </span>
-              <h4 className="font-bold text-sm text-[#032448]">
-                Unduh Seluruh Kode Sumber (ZIP)
-              </h4>
-              <p className="text-slate-600 text-xs mt-0.5">
-                Berisi seluruh berkas React, konfigurasi Tailwind, Firestore, rubrik, dan dokumentasi README.
-              </p>
-            </div>
-
-            <a
-              href="/source-code.zip"
-              download="sistem-asesmen-kokurikuler-pertunjukan-seni.zip"
-              className="inline-flex items-center justify-center space-x-2 px-5 py-3 rounded-xl bg-[#032448] hover:bg-[#1F3A5F] text-white font-bold text-xs shadow-md transition-all shrink-0 cursor-pointer text-center"
-            >
-              <Download className="w-4 h-4 text-amber-400" />
-              <span>Unduh File .ZIP</span>
-            </a>
+        <div className="p-6 space-y-5 overflow-y-auto text-slate-800 text-xs leading-relaxed">
+          {/* Status Kesiapan */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 space-y-1.5">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900">
+              <Sparkles className="w-3 h-3 text-amber-700" />
+              Siap GitHub Actions Pages
+            </span>
+            <h4 className="font-bold text-sm text-[#032448]">
+              Ekspor Kode Sumber melalui Antarmuka Platform
+            </h4>
+            <p className="text-slate-600">
+              Gunakan ikon <strong>GitHub</strong> atau <strong>Download App (.zip)</strong> di bilah atas aplikasi untuk mengunduh atau langsung menyimpan repositori ke akun GitHub Anda (disarankan repositori <strong>Private</strong>).
+            </p>
           </div>
 
-          {/* Metode 1: Upload Langsung via Web (Paling Mudah) */}
-          <div className="space-y-3">
+          {/* Langkah 1: Push via Git CLI */}
+          <div className="space-y-2.5">
             <div className="flex items-center space-x-2">
               <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-xs">
                 1
               </span>
               <h4 className="font-bold text-sm text-slate-900">
-                Cara Paling Mudah: Upload via Web GitHub (Tanpa Terminal)
+                Push dari Folder Hasil Unduhan (Terminal / Git CLI)
               </h4>
             </div>
 
-            <div className="ml-8 space-y-2.5 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-              <div className="flex items-start gap-2">
-                <span className="font-bold text-slate-700">a.</span>
-                <p>
-                  Klik tombol <strong>"Unduh File .ZIP"</strong> di atas, lalu ekstrak (unzip) foldernya di komputer/laptop Anda.
-                </p>
-              </div>
-
-              <div className="flex items-start gap-2">
-                <span className="font-bold text-slate-700">b.</span>
-                <p>
-                  Buka peramban ke{' '}
-                  <a
-                    href="https://github.com/new"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-blue-600 font-bold underline inline-flex items-center gap-0.5"
-                  >
-                    github.com/new <ExternalLink className="w-3 h-3" />
-                  </a>{' '}
-                  dan beri nama repository (misal: <code>asesmen-pertunjukan-seni</code>), lalu klik <strong>Create repository</strong>.
-                </p>
-              </div>
-
-              <div className="flex items-start gap-2">
-                <span className="font-bold text-slate-700">c.</span>
-                <p>
-                  Pada halaman GitHub yang baru dibuat, klik link kecil bertuliskan <strong>"uploading an existing file"</strong>.
-                </p>
-              </div>
-
-              <div className="flex items-start gap-2">
-                <span className="font-bold text-slate-700">d.</span>
-                <p>
-                  Tarik (drag & drop) seluruh berkas yang ada di dalam folder ekstrak ke halaman GitHub tersebut, lalu klik tombol hijau <strong>Commit changes</strong>.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Metode 2: Push via AI Studio Langsung */}
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 font-bold flex items-center justify-center text-xs">
-                2
-              </span>
-              <h4 className="font-bold text-sm text-slate-900">
-                Alternatif: Biarkan Sistem AI yang Melakukan Push Otomatis
-              </h4>
-            </div>
-
-            <div className="ml-8 bg-blue-50/70 p-4 rounded-2xl border border-blue-200 space-y-2">
-              <p className="text-slate-700">
-                Jika Anda memiliki URL repositori GitHub dan <strong>Personal Access Token (PAT)</strong>, Anda cukup ketikkan di kolom chat:
-              </p>
-              <div className="bg-white p-3 rounded-xl border border-blue-200 font-mono text-[11px] text-slate-800">
-                "Tolong push ke https://github.com/username/nama-repo dengan token: ghp_xxxxxxxxxxxx"
-              </div>
-              <p className="text-[11px] text-slate-500">
-                Sistem akan langsung mengeksekusi push otomatis dari server ke akun GitHub Anda.
-              </p>
-            </div>
-          </div>
-
-          {/* Metode 3: Menggunakan Git Terminal / GitHub Desktop */}
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-xs">
-                3
-              </span>
-              <h4 className="font-bold text-sm text-slate-900">
-                Bagi Pengguna Terminal / Git CLI
-              </h4>
-            </div>
-
-            <div className="ml-8 bg-slate-900 text-slate-100 p-3.5 rounded-xl font-mono text-[11px] space-y-2">
+            <div className="ml-8 bg-slate-900 text-slate-100 p-3.5 rounded-xl font-mono text-[11px] space-y-1.5">
               <div className="flex items-center justify-between text-slate-400 border-b border-slate-700 pb-1.5 mb-1.5">
                 <span>Bash / Command Prompt</span>
                 <button
                   type="button"
                   onClick={() =>
                     handleCopyCommand(
-                      'git remote add origin https://github.com/USERNAME/REPO_NAME.git\ngit branch -M main\ngit push -u origin main',
-                      3
+                      'git init\ngit add .\ngit commit -m "Initial commit: Symphony of Nusantara"\ngit branch -M main\ngit remote add origin https://github.com/USERNAME/REPO_NAME.git\ngit push -u origin main',
+                      1
                     )
                   }
                   className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 cursor-pointer"
                 >
-                  {copiedStep === 3 ? (
+                  {copiedStep === 1 ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   ) : (
                     <Copy className="w-3.5 h-3.5" />
                   )}
-                  <span>{copiedStep === 3 ? 'Tersalin' : 'Salin Perintah'}</span>
+                  <span>{copiedStep === 1 ? 'Tersalin' : 'Salin Perintah'}</span>
                 </button>
               </div>
-              <p className="text-emerald-400">git remote add origin https://github.com/USERNAME/REPO_NAME.git</p>
+              <p className="text-emerald-400">git init</p>
+              <p className="text-emerald-400">git add .</p>
+              <p className="text-emerald-400">git commit -m &quot;Initial commit: Symphony of Nusantara&quot;</p>
               <p className="text-emerald-400">git branch -M main</p>
+              <p className="text-emerald-400">git remote add origin https://github.com/USERNAME/REPO_NAME.git</p>
               <p className="text-emerald-400">git push -u origin main</p>
+            </div>
+          </div>
+
+          {/* Langkah 2: Aktifkan GitHub Actions */}
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 font-bold flex items-center justify-center text-xs">
+                2
+              </span>
+              <h4 className="font-bold text-sm text-slate-900">
+                Aktifkan GitHub Pages dengan Source: GitHub Actions
+              </h4>
+            </div>
+            <div className="ml-8 p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 space-y-1.5 text-slate-700">
+              <p>
+                Di repositori GitHub Anda, buka <strong>Settings → Pages</strong>, lalu pada bagian <strong>Build and deployment → Source</strong> wajib pilih{' '}
+                <strong>GitHub Actions</strong> (<strong>JANGAN</strong> pilih <em>Deploy from a branch</em>).
+              </p>
+              <p className="text-[11px] text-rose-700 font-semibold">
+                Jika muncul error <code>build with jekyll</code>, penyebabnya adalah Source masih berada di <em>Deploy from a branch</em> atau folder tersembunyi <code>.github/workflows/deploy.yml</code> belum ikut ter-push ke GitHub.
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Workflow <code>.github/workflows/deploy.yml</code> otomatis menjalankan <code>npm install</code> &amp; <code>npm run build</code> lalu menerbitkan folder <code>dist/</code> (tanpa Jekyll).
+              </p>
+            </div>
+          </div>
+
+          {/* Langkah 3: Authorized Domains di Firebase */}
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center justify-center text-xs">
+                3
+              </span>
+              <h4 className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                <Globe className="w-4 h-4 text-amber-700" />
+                Wajib: Daftarkan Domain di Firebase Authentication
+              </h4>
+            </div>
+            <div className="ml-8 p-3.5 rounded-xl bg-amber-50 border border-amber-200 space-y-1.5 text-slate-700">
+              <p>
+                Buka{' '}
+                <a
+                  href="https://console.firebase.google.com/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-700 font-bold underline inline-flex items-center gap-0.5"
+                >
+                  Firebase Console <ExternalLink className="w-3 h-3" />
+                </a>{' '}
+                → <strong>Authentication → Settings → Authorized domains</strong>, lalu tambahkan domain hosting Anda (mis. <code>username.github.io</code>) agar Login Google tidak memunculkan error <code>auth/unauthorized-domain</code>.
+              </p>
+              <p className="text-[11px] text-slate-600 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                <span>Gunakan Vercel / Netlify / Firebase Hosting dengan repo Private jika ingin melindungi data siswa dari akses repositori publik.</span>
+              </p>
             </div>
           </div>
         </div>

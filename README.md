@@ -88,9 +88,11 @@ Gunakan tombol **GitHub** (atau ikon **Download app**) pada bilah atas antarmuka
 
 ## 🔐 Catatan Penting Setelah Pindah ke GitHub / Hosting Baru
 
-1. **Authorized Domains (Wajib agar Login Google Berfungsi)**:  
-   Jika aplikasi di-hosting di domain baru (mis. Vercel, Netlify, Firebase Hosting, atau GitHub Pages), buka **Firebase Console → Authentication → Settings → Authorized domains**, lalu tambahkan domain hosting tersebut.
-2. **Aturan Keamanan Firestore**:  
+1. **Aktifkan GitHub Pages via GitHub Actions** *(jika hosting di GitHub Pages)*:  
+   Buka **Settings → Pages → Build and deployment → Source**, lalu pilih **GitHub Actions** (jangan memilih *Deploy from a branch*, karena source Vite `.tsx` perlu dibuild menjadi `dist/` terlebih dahulu oleh `.github/workflows/deploy.yml`).
+2. **Authorized Domains (Wajib agar Login Google Berfungsi)**:  
+   Jika aplikasi di-hosting di domain baru (mis. `username.github.io`, Vercel, Netlify, atau Firebase Hosting), buka **Firebase Console → Authentication → Settings → Authorized domains**, lalu tambahkan domain hosting tersebut.
+3. **Aturan Keamanan Firestore**:  
    Pastikan `firestore.rules` ikut dideploy jika Anda berpindah ke proyek Firebase baru (`firebase deploy --only firestore:rules`).
-3. **Konfigurasi Firebase**:  
+4. **Konfigurasi Firebase**:  
    File `firebase-applet-config.json` sudah memuat konfigurasi koneksi proyek Firebase Anda. Pastikan konfigurasi tersebut sesuai dengan proyek Firebase tujuan Anda.

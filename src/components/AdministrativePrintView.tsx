@@ -126,7 +126,7 @@ export const AdministrativePrintView: React.FC<AdministrativePrintViewProps> = (
           {/* Kop */}
           <div className="text-center pb-5 border-b-2 border-black relative px-16 sm:px-24">
             <img
-              src="/assets/aistudio/new2-LOGO-YOSEF_c283a7fd.jpg"
+              src={`${import.meta.env.BASE_URL}assets/aistudio/new2-LOGO-YOSEF_c283a7fd.jpg`}
               alt="Logo SMA Pangudi Luhur St. Yosef Surakarta"
               className="absolute left-0 top-1 w-16 sm:w-20 h-20 object-contain"
             />
@@ -253,7 +253,7 @@ export const AdministrativePrintView: React.FC<AdministrativePrintViewProps> = (
         <div className="bg-white rounded-2xl p-10 sm:p-14 border-4 border-double border-[#032448] shadow-xs print:shadow-none text-center text-black space-y-6">
           <div className="flex justify-center">
             <img
-              src="/assets/aistudio/new2-LOGO-YOSEF_c283a7fd.jpg"
+              src={`${import.meta.env.BASE_URL}assets/aistudio/new2-LOGO-YOSEF_c283a7fd.jpg`}
               alt="Logo SMA Pangudi Luhur St. Yosef Surakarta"
               className="w-20 h-20 object-contain"
             />

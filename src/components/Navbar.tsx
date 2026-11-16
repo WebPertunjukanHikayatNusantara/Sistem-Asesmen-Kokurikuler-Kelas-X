@@ -52,7 +52,7 @@ export const Navbar: React.FC = () => {
           <div className="flex items-center space-x-3 min-w-0">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-xs overflow-hidden bg-white p-0.5 shrink-0">
               <img
-                src="/assets/aistudio/new2-LOGO-YOSEF_c283a7fd.jpg"
+                src={`${import.meta.env.BASE_URL}assets/aistudio/new2-LOGO-YOSEF_c283a7fd.jpg`}
                 alt="Logo SMA Pangudi Luhur St. Yosef Surakarta"
                 className="w-full h-full object-contain"
               />

@@ -46,6 +46,17 @@ export const LoginPortal: React.FC = () => {
         setErrorMessage(
           'Jendela popup diblokir oleh peramban. Harap izinkan popup di peramban Anda untuk melanjutkan login Google.'
         );
+      } else if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'auth/unauthorized-domain') {
+        setErrorMessage(
+          `Domain (${window.location.hostname}) belum didaftarkan di Firebase Authentication. Tambahkan domain ini di Firebase Console → Authentication → Settings → Authorized domains.`
+        );
+      } else if (
+        err instanceof Error &&
+        (err.message.toLowerCase().includes('quota') || err.message.toLowerCase().includes('resource-exhausted'))
+      ) {
+        setErrorMessage(
+          'Kuota baca harian gratis Firebase Firestore untuk hari ini telah terlampaui. Kuota akan otomatis direset keesokan harinya atau upgrade database di Firebase Console.'
+        );
       } else {
         setErrorMessage(
           err instanceof Error ? err.message : 'Gagal masuk dengan Google. Silakan periksa akun dan coba kembali.'
@@ -106,7 +117,7 @@ export const LoginPortal: React.FC = () => {
           <div className="flex justify-center">
             <div className="w-16 h-16 sm:w-20 sm:h-20 p-1.5 bg-white rounded-2xl shadow-sm border border-slate-200">
               <img
-                src="/assets/aistudio/new2-LOGO-YOSEF_c283a7fd.jpg"
+                src={`${import.meta.env.BASE_URL}assets/aistudio/new2-LOGO-YOSEF_c283a7fd.jpg`}
                 alt="Logo SMA Pangudi Luhur St. Yosef Surakarta"
                 className="w-full h-full object-contain"
               />
