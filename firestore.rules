@@ -1,0 +1,472 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Safety net catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_.@\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function myEmail() {
+      return request.auth.token.email;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() && myEmail() == 'prasetyoadhitama92@gmail.com';
+    }
+
+    function userDocExists() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function myUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function myRole() {
+      return userDocExists() ? myUser().role : 'murid';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (userDocExists() && myRole() == 'admin');
+    }
+
+    function isPendamping() {
+      return userDocExists() && myRole() == 'pendamping';
+    }
+
+    function isWaliKelas() {
+      return userDocExists() && myRole() == 'walikelas';
+    }
+
+    function isMurid() {
+      return userDocExists() && myRole() == 'murid';
+    }
+
+    function myDivisionId() {
+      return userDocExists() && myUser().keys().hasAny(['assignedDivisionId']) ? myUser().assignedDivisionId : '';
+    }
+
+    function mySecondaryDivisionId() {
+      return userDocExists() && myUser().keys().hasAny(['secondaryDivisionId']) ? myUser().secondaryDivisionId : '';
+    }
+
+    function myClassGroup() {
+      return userDocExists() && myUser().keys().hasAny(['assignedClassGroup']) ? myUser().assignedClassGroup : '';
+    }
+
+    function myStudentId() {
+      return userDocExists() && myUser().keys().hasAny(['studentId']) ? myUser().studentId : '';
+    }
+
+    function hasValidStaffAssignmentForRole(roleName) {
+      return exists(/databases/$(database)/documents/staffAssignments/$(myEmail()))
+        && get(/databases/$(database)/documents/staffAssignments/$(myEmail())).data.role == roleName;
+    }
+
+    function hasValidInviteCodeForRole(data) {
+      return data.keys().hasAny(['inviteCode'])
+        && data.inviteCode is string
+        && data.inviteCode.size() > 0
+        && data.inviteCode.size() <= 64
+        && (
+          (exists(/databases/$(database)/documents/roleCodes/$(data.inviteCode))
+            && get(/databases/$(database)/documents/roleCodes/$(data.inviteCode)).data.active == true
+            && get(/databases/$(database)/documents/roleCodes/$(data.inviteCode)).data.role == data.role)
+          || (!exists(/databases/$(database)/documents/appConfig/default) && (
+            (data.role == 'pendamping' && data.inviteCode == 'PENDAMPING2026')
+            || (data.role == 'walikelas' && data.inviteCode == 'WALIKELAS2026')
+          ))
+        );
+    }
+
+    function isAuthorizedRoleClaim(data) {
+      return data.role == 'murid'
+        || isBootstrappedAdmin()
+        || hasValidStaffAssignmentForRole(data.role)
+        || hasValidInviteCodeForRole(data);
+    }
+
+    // Validation helpers
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'role'])
+        && data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'photoURL', 'role',
+          'assignedDivisionId', 'secondaryDivisionId', 'assignedClassGroup',
+          'studentId', 'classGroup', 'nisn', 'canExport', 'inviteCode',
+          'createdAt', 'updatedAt'
+        ])
+        && data.uid is string && data.uid.size() <= 128
+        && data.email is string && data.email.size() <= 128
+        && data.role in ['admin', 'pendamping', 'walikelas', 'murid']
+        && (!data.keys().hasAny(['displayName']) || (data.displayName is string && data.displayName.size() <= 128))
+        && (!data.keys().hasAny(['assignedDivisionId']) || (data.assignedDivisionId is string && data.assignedDivisionId.size() <= 64))
+        && (!data.keys().hasAny(['secondaryDivisionId']) || (data.secondaryDivisionId is string && data.secondaryDivisionId.size() <= 64));
+    }
+
+    function isValidStaffAssignment(data) {
+      return data.keys().hasAll(['id', 'email', 'displayName', 'role'])
+        && data.keys().hasOnly([
+          'id', 'email', 'displayName', 'role', 'assignedDivisionId',
+          'assignedClassGroup', 'canExport', 'assignedBy', 'createdAt', 'updatedAt'
+        ])
+        && data.email is string && data.email.size() <= 128
+        && data.displayName is string && data.displayName.size() <= 128
+        && data.role in ['admin', 'pendamping', 'walikelas'];
+    }
+
+    function isValidAppConfig(data) {
+      return data.keys().hasAll(['id', 'primaryDivisionWeight', 'secondaryDivisionWeight', 'allowStudentDivisionSelection'])
+        && data.keys().hasOnly([
+          'id', 'primaryDivisionWeight', 'secondaryDivisionWeight',
+          'allowStudentDivisionSelection', 'updatedBy', 'updatedAt'
+        ])
+        && data.primaryDivisionWeight is number
+        && data.secondaryDivisionWeight is number
+        && data.primaryDivisionWeight + data.secondaryDivisionWeight == 100
+        && data.allowStudentDivisionSelection is bool;
+    }
+
+    function isValidRoleCode(data) {
+      return data.keys().hasAll(['code', 'role', 'active'])
+        && data.keys().hasOnly(['code', 'role', 'label', 'active', 'updatedAt'])
+        && data.code is string && data.code.size() > 0 && data.code.size() <= 64
+        && data.role in ['admin', 'pendamping', 'walikelas']
+        && data.active is bool;
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['id', 'nisn', 'name', 'classGroup', 'primaryDivisionId'])
+        && data.keys().hasOnly([
+          'id', 'nisn', 'name', 'classGroup', 'email', 'phone', 'gender',
+          'primaryDivisionId', 'secondaryDivisionId', 'isDpkCommittee',
+          'dpkRoleNote', 'status', 'notes', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 128
+        && data.nisn is string && data.nisn.size() <= 30
+        && data.classGroup in ['X-1', 'X-2', 'X-3', 'X-4', 'X-5', 'X-6']
+        && data.primaryDivisionId is string && data.primaryDivisionId.size() > 0 && data.primaryDivisionId.size() <= 64
+        && (!data.keys().hasAny(['secondaryDivisionId']) || (data.secondaryDivisionId is string && data.secondaryDivisionId.size() <= 64))
+        && (!data.keys().hasAny(['status']) || data.status in ['Aktif', 'Perlu Sapaan']);
+    }
+
+    function isValidDivisionPeer(data) {
+      return data.keys().hasAll(['id', 'studentId', 'studentName', 'classGroup', 'divisionId', 'divisionRole'])
+        && data.keys().hasOnly(['id', 'studentId', 'studentName', 'classGroup', 'divisionId', 'divisionRole', 'isDpkCommittee'])
+        && data.studentId is string && data.studentId.size() <= 128
+        && data.studentName is string && data.studentName.size() <= 128
+        && data.divisionId is string && data.divisionId.size() <= 64
+        && data.divisionRole in ['utama', 'pendukung'];
+    }
+
+    function isValidAssessment(data) {
+      return data.keys().hasAll([
+          'id', 'studentId', 'studentName', 'classGroup', 'divisionId',
+          'divisionName', 'projectStage', 'stageNumber', 'dimensionId',
+          'dimensionName', 'formasiGrandDesain', 'indicatorCode',
+          'indicatorTitle', 'growthLevel', 'internalScore', 'nextStepMessage',
+          'teacherId', 'teacherName', 'date'
+        ])
+        && data.keys().hasOnly([
+          'id', 'studentId', 'studentName', 'classGroup', 'divisionId',
+          'divisionName', 'projectStage', 'stageNumber', 'dimensionId',
+          'dimensionName', 'formasiGrandDesain', 'indicatorCode',
+          'indicatorTitle', 'growthLevel', 'internalScore', 'nextStepMessage',
+          'feedback', 'teacherId', 'teacherName', 'date', 'createdAt', 'updatedAt'
+        ])
+        && data.growthLevel in ['Mulai Tumbuh', 'Berkembang', 'Menjadi Teladan']
+        && data.internalScore in [1, 2, 3]
+        && data.stageNumber is number && data.stageNumber >= 1 && data.stageNumber <= 6
+        && data.divisionId is string && data.divisionId.size() <= 64
+        && data.nextStepMessage is string && data.nextStepMessage.size() <= 1000;
+    }
+
+    function isValidSelfAssessment(data) {
+      return data.keys().hasAll(['id', 'studentId', 'indicatorCode', 'growthLevel'])
+        && data.keys().hasOnly([
+          'id', 'studentId', 'studentName', 'classGroup',
+          'primaryDivisionId', 'secondaryDivisionId',
+          'dimensionId', 'dimensionName', 'indicatorCode',
+          'indicatorTitle', 'growthLevel', 'reflectionNote',
+          'createdAt', 'updatedAt'
+        ])
+        && data.growthLevel in ['Mulai Tumbuh', 'Berkembang', 'Menjadi Teladan'];
+    }
+
+    function isValidStudentReflection(data) {
+      return data.keys().hasAll(['id', 'studentId', 'isSubmitted'])
+        && data.keys().hasOnly([
+          'id', 'studentId', 'studentName', 'classGroup',
+          'primaryDivisionId', 'secondaryDivisionId',
+          'whoHelpedMeGrow', 'whoIHelpedAndHowItFelt', 'whenIFeltValued',
+          'whatIAmMostGratefulFor', 'whatIWantToImprove', 'projectReflectionSummary',
+          'mengalamiCintaNote', 'menghidupiCintaNote', 'meneruskanCintaNote',
+          'isSubmitted', 'submittedAt', 'updatedAt'
+        ])
+        && data.isSubmitted is bool;
+    }
+
+    function isValidAppreciation(data) {
+      return data.keys().hasAll(['id', 'type', 'toStudentId', 'fromUserId', 'fromRole', 'message'])
+        && data.keys().hasOnly([
+          'id', 'type', 'toStudentId', 'toStudentName', 'toClassGroup',
+          'divisionId', 'divisionName', 'fromUserId', 'fromStudentId',
+          'fromName', 'fromRole', 'message', 'badgeTitle', 'createdAt', 'updatedAt'
+        ])
+        && data.type in ['teacher_appreciation', 'peer_appreciation', 'special_contribution']
+        && data.fromRole in ['admin', 'pendamping', 'walikelas', 'murid']
+        && data.message is string && data.message.size() >= 3 && data.message.size() <= 2000;
+    }
+
+    function isValidHomeroomNote(data) {
+      return data.keys().hasAll(['id', 'studentId', 'classGroup', 'teacherId'])
+        && data.keys().hasOnly([
+          'id', 'studentId', 'studentName', 'classGroup',
+          'teacherId', 'teacherName', 'attitudeNote', 'independenceNote',
+          'holisticInvolvementNote', 'needsFollowUp', 'createdAt', 'updatedAt'
+        ])
+        && data.classGroup in ['X-1', 'X-2', 'X-3', 'X-4', 'X-5', 'X-6']
+        && data.needsFollowUp is bool;
+    }
+
+    function isValidProgressLog(data) {
+      return data.keys().hasAll(['id', 'studentId', 'stageTitle', 'status'])
+        && data.keys().hasOnly([
+          'id', 'studentId', 'studentName', 'classGroup',
+          'primaryDivisionId', 'secondaryDivisionId',
+          'stageTitle', 'stageNumber', 'description', 'status',
+          'milestoneDate', 'artifactsNote', 'teacherFeedback',
+          'studentReflection', 'updatedBy', 'createdAt', 'updatedAt'
+        ])
+        && data.status in ['Belum Dimulai', 'Sedang Berjalan', 'Tersendat / Perlu Sapaan', 'Selesai'];
+    }
+
+    // 1. Users
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId)
+        && isValidUserProfile(incoming())
+        && (
+          isAdmin()
+          || (isOwner(userId) && incoming().uid == request.auth.uid && isAuthorizedRoleClaim(incoming()))
+        );
+      allow update: if isValidId(userId)
+        && isValidUserProfile(incoming())
+        && (
+          isAdmin()
+          || (
+            isOwner(userId)
+            && incoming().uid == existing().uid
+            && (
+              incoming().role == existing().role
+              || isAuthorizedRoleClaim(incoming())
+            )
+          )
+        );
+      allow delete: if isAdmin();
+    }
+
+    // 2. Staff Assignments
+    match /staffAssignments/{emailKey} {
+      allow get: if isValidId(emailKey) && (isAdmin() || (isSignedIn() && emailKey == myEmail()));
+      allow list: if isAdmin();
+      allow create, update: if isValidId(emailKey) && isAdmin() && isValidStaffAssignment(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // 3. AppConfig
+    match /appConfig/{configId} {
+      allow read: if isSignedIn();
+      allow create, update: if isValidId(configId) && isAdmin() && isValidAppConfig(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // 4. RoleCodes (readable only by admin; verified server-side via get() during user onboarding)
+    match /roleCodes/{codeId} {
+      allow read: if isAdmin();
+      allow create, update: if isValidId(codeId) && isAdmin() && isValidRoleCode(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // 5. Students
+    match /students/{studentId} {
+      allow read: if isAdmin()
+        || (isPendamping() && (existing().primaryDivisionId == myDivisionId() || existing().secondaryDivisionId == myDivisionId()))
+        || (isWaliKelas() && existing().classGroup == myClassGroup())
+        || (isMurid() && existing().email == myEmail());
+
+      allow create: if isValidId(studentId) && isValidStudent(incoming()) && (
+        isAdmin()
+        || (isPendamping() && (incoming().primaryDivisionId == myDivisionId() || incoming().secondaryDivisionId == myDivisionId()))
+        || (isMurid() && incoming().email == myEmail())
+      );
+
+      allow update: if isValidId(studentId) && isValidStudent(incoming()) && (
+        isAdmin()
+        || (isPendamping() && (existing().primaryDivisionId == myDivisionId() || existing().secondaryDivisionId == myDivisionId()))
+        || (isMurid() && existing().email == myEmail() && incoming().diff(existing()).affectedKeys().hasOnly(['primaryDivisionId', 'secondaryDivisionId', 'name', 'classGroup', 'nisn', 'gender', 'isDpkCommittee', 'updatedAt']))
+        || (isMurid()
+            && existing().email.matches('^std_.*@siswa\\.smyosef\\.sch\\.id$')
+            && incoming().email == myEmail()
+            && incoming().id == existing().id
+            && incoming().nisn == existing().nisn
+            && incoming().name == existing().name
+            && incoming().classGroup == existing().classGroup
+            && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'gender', 'primaryDivisionId', 'secondaryDivisionId', 'isDpkCommittee', 'updatedAt']))
+      );
+
+      allow delete: if isValidId(studentId) && isAdmin();
+    }
+
+    // 6. DivisionPeers (PII-free directory for division peer appreciation)
+    match /divisionPeers/{peerId} {
+      allow read: if isAdmin()
+        || isPendamping()
+        || isWaliKelas()
+        || (isMurid() && (existing().divisionId == myDivisionId() || existing().divisionId == mySecondaryDivisionId()));
+
+      allow create, update: if isValidId(peerId) && isValidDivisionPeer(incoming()) && (
+        isAdmin()
+        || (isPendamping() && incoming().divisionId == myDivisionId())
+        || (isMurid() && incoming().studentId == myStudentId())
+      );
+
+      allow delete: if isValidId(peerId) && (
+        isAdmin()
+        || (isMurid() && existing().studentId == myStudentId())
+      );
+    }
+
+    // 7. Assessments (Wali Kelas read-only; Pendamping own division only; Murid self-only)
+    match /assessments/{assessmentId} {
+      allow read: if isAdmin()
+        || (isPendamping() && existing().divisionId == myDivisionId())
+        || (isWaliKelas() && existing().classGroup == myClassGroup())
+        || (isMurid() && existing().studentId == myStudentId());
+
+      allow create: if isValidId(assessmentId) && isValidAssessment(incoming()) && (
+        isAdmin()
+        || (isPendamping() && incoming().divisionId == myDivisionId() && incoming().teacherId == request.auth.uid)
+      );
+
+      allow update: if isValidId(assessmentId) && isValidAssessment(incoming()) && (
+        isAdmin()
+        || (isPendamping() && existing().divisionId == myDivisionId() && incoming().divisionId == myDivisionId())
+      );
+
+      allow delete: if isValidId(assessmentId) && (
+        isAdmin()
+        || (isPendamping() && existing().divisionId == myDivisionId())
+      );
+    }
+
+    // 8. SelfAssessments
+    match /selfAssessments/{saId} {
+      allow read: if isAdmin()
+        || (isPendamping() && (existing().primaryDivisionId == myDivisionId() || existing().secondaryDivisionId == myDivisionId()))
+        || (isWaliKelas() && existing().classGroup == myClassGroup())
+        || (isMurid() && existing().studentId == myStudentId());
+
+      allow create, update: if isValidId(saId) && isValidSelfAssessment(incoming()) && (
+        isAdmin()
+        || (isMurid() && incoming().studentId == myStudentId())
+      );
+
+      allow delete: if isValidId(saId) && isAdmin();
+    }
+
+    // 9. StudentReflections (Filled once across all divisions)
+    match /studentReflections/{reflectionId} {
+      allow read: if isAdmin()
+        || (isPendamping() && (existing().primaryDivisionId == myDivisionId() || existing().secondaryDivisionId == myDivisionId()))
+        || (isWaliKelas() && existing().classGroup == myClassGroup())
+        || (isMurid() && existing().studentId == myStudentId());
+
+      allow create, update: if isValidId(reflectionId) && isValidStudentReflection(incoming()) && (
+        isAdmin()
+        || (isMurid() && incoming().studentId == myStudentId())
+      );
+
+      allow delete: if isValidId(reflectionId) && isAdmin();
+    }
+
+    // 10. Appreciations
+    match /appreciations/{appreciationId} {
+      allow read: if isAdmin()
+        || (isPendamping() && existing().divisionId == myDivisionId())
+        || (isWaliKelas() && existing().toClassGroup == myClassGroup())
+        || (isMurid() && (existing().toStudentId == myStudentId() || existing().fromUserId == request.auth.uid));
+
+      allow create: if isValidId(appreciationId) && isValidAppreciation(incoming()) && (
+        isAdmin()
+        || (isPendamping() && incoming().divisionId == myDivisionId() && incoming().fromUserId == request.auth.uid && incoming().type in ['teacher_appreciation', 'special_contribution'])
+        || (isWaliKelas() && incoming().toClassGroup == myClassGroup() && incoming().fromUserId == request.auth.uid && incoming().type in ['teacher_appreciation', 'special_contribution'])
+        || (isMurid() && incoming().type == 'peer_appreciation' && incoming().fromUserId == request.auth.uid && incoming().toStudentId != myStudentId() && (incoming().divisionId == myDivisionId() || incoming().divisionId == mySecondaryDivisionId()))
+      );
+
+      allow update, delete: if isValidId(appreciationId) && (
+        isAdmin()
+        || (isPendamping() && existing().fromUserId == request.auth.uid)
+        || (isWaliKelas() && existing().fromUserId == request.auth.uid)
+        || (isMurid() && existing().fromUserId == request.auth.uid && existing().type == 'peer_appreciation')
+      );
+    }
+
+    // 11. HomeroomNotes (Wali Kelas writes; Admin reads/writes; Murid reads own)
+    match /homeroomNotes/{noteId} {
+      allow read: if isAdmin()
+        || (isWaliKelas() && existing().classGroup == myClassGroup())
+        || (isMurid() && existing().studentId == myStudentId());
+
+      allow create, update: if isValidId(noteId) && isValidHomeroomNote(incoming()) && (
+        isAdmin()
+        || (isWaliKelas() && incoming().classGroup == myClassGroup() && incoming().teacherId == request.auth.uid)
+      );
+
+      allow delete: if isValidId(noteId) && isAdmin();
+    }
+
+    // 12. ProgressLogs
+    match /progressLogs/{logId} {
+      allow read: if isAdmin()
+        || (isPendamping() && (existing().primaryDivisionId == myDivisionId() || existing().secondaryDivisionId == myDivisionId()))
+        || (isWaliKelas() && existing().classGroup == myClassGroup())
+        || (isMurid() && existing().studentId == myStudentId());
+
+      allow create: if isValidId(logId) && isValidProgressLog(incoming()) && (
+        isAdmin()
+        || (isPendamping() && (incoming().primaryDivisionId == myDivisionId() || incoming().secondaryDivisionId == myDivisionId()))
+        || (isMurid() && incoming().studentId == myStudentId())
+      );
+
+      allow update: if isValidId(logId) && isValidProgressLog(incoming()) && (
+        isAdmin()
+        || (isPendamping() && (existing().primaryDivisionId == myDivisionId() || existing().secondaryDivisionId == myDivisionId()))
+        || (isMurid() && existing().studentId == myStudentId() && incoming().diff(existing()).affectedKeys().hasOnly(['studentReflection', 'artifactsNote', 'updatedAt']))
+      );
+
+      allow delete: if isValidId(logId) && isAdmin();
+    }
+  }
+}

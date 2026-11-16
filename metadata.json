@@ -1,0 +1,6 @@
+{
+  "name": "Symphony of Nusantara Assessment System",
+  "description": "Sistem Asesmen Terpadu Kurikulum Merdeka untuk Proyek Pertunjukan Seni dengan portal Guru dan Siswa, manajemen kelas X-1 sampai X-6, monitoring progres, dan ekspor data.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,307 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role-based access control for admin, pendamping divisi, wali kelas, and murid",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "photoURL": { "type": "string", "maxLength": 512 },
+        "role": { "type": "string", "enum": ["admin", "pendamping", "walikelas", "murid"] },
+        "assignedDivisionId": { "type": "string", "maxLength": 64 },
+        "secondaryDivisionId": { "type": "string", "maxLength": 64 },
+        "assignedClassGroup": { "type": "string", "enum": ["X-1", "X-2", "X-3", "X-4", "X-5", "X-6"] },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "classGroup": { "type": "string", "enum": ["X-1", "X-2", "X-3", "X-4", "X-5", "X-6"] },
+        "nisn": { "type": "string", "maxLength": 30 },
+        "canExport": { "type": "boolean" },
+        "inviteCode": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "StaffAssignment": {
+      "title": "StaffAssignment",
+      "description": "Admin-managed role assignment for Pendamping Divisi, Wali Kelas, and Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "enum": ["admin", "pendamping", "walikelas"] },
+        "assignedDivisionId": { "type": "string", "maxLength": 64 },
+        "assignedClassGroup": { "type": "string", "enum": ["X-1", "X-2", "X-3", "X-4", "X-5", "X-6"] },
+        "canExport": { "type": "boolean" },
+        "assignedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "email", "displayName", "role"]
+    },
+    "AppConfig": {
+      "title": "AppConfig",
+      "description": "Global curriculum and division weighting configuration managed by Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "primaryDivisionWeight": { "type": "number" },
+        "secondaryDivisionWeight": { "type": "number" },
+        "allowStudentDivisionSelection": { "type": "boolean" },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "primaryDivisionWeight", "secondaryDivisionWeight", "allowStudentDivisionSelection"]
+    },
+    "RoleCode": {
+      "title": "RoleCode",
+      "description": "Invite authorization codes for educator onboarding",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 64 },
+        "role": { "type": "string", "enum": ["admin", "pendamping", "walikelas"] },
+        "label": { "type": "string", "maxLength": 128 },
+        "active": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "role", "active"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student roster record supporting 1 primary division and 1 optional secondary division plus DPK flag",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "nisn": { "type": "string", "maxLength": 30 },
+        "name": { "type": "string", "maxLength": 128 },
+        "classGroup": { "type": "string", "enum": ["X-1", "X-2", "X-3", "X-4", "X-5", "X-6"] },
+        "email": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "gender": { "type": "string", "enum": ["Laki-laki", "Perempuan"] },
+        "primaryDivisionId": { "type": "string", "maxLength": 64 },
+        "secondaryDivisionId": { "type": "string", "maxLength": 64 },
+        "isDpkCommittee": { "type": "boolean" },
+        "dpkRoleNote": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "enum": ["Aktif", "Perlu Sapaan"] },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "nisn", "name", "classGroup", "primaryDivisionId"]
+    },
+    "DivisionPeer": {
+      "title": "DivisionPeer",
+      "description": "Privacy-safe division peer directory for student peer appreciation without PII or scores",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "studentName": { "type": "string", "maxLength": 128 },
+        "classGroup": { "type": "string", "enum": ["X-1", "X-2", "X-3", "X-4", "X-5", "X-6"] },
+        "divisionId": { "type": "string", "maxLength": 64 },
+        "divisionRole": { "type": "string", "enum": ["utama", "pendukung"] },
+        "isDpkCommittee": { "type": "boolean" }
+      },
+      "required": ["id", "studentId", "studentName", "classGroup", "divisionId", "divisionRole"]
+    },
+    "Assessment": {
+      "title": "Assessment",
+      "description": "Formative growth-level assessment per behavior indicator and division",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "studentName": { "type": "string", "maxLength": 128 },
+        "classGroup": { "type": "string", "enum": ["X-1", "X-2", "X-3", "X-4", "X-5", "X-6"] },
+        "divisionId": { "type": "string", "maxLength": 64 },
+        "divisionName": { "type": "string", "maxLength": 128 },
+        "projectStage": { "type": "string", "maxLength": 128 },
+        "stageNumber": { "type": "number" },
+        "dimensionId": { "type": "string", "enum": ["gotong-royong", "mandiri", "bernalar-kritis", "kreatif", "kebinekaan"] },
+        "dimensionName": { "type": "string", "maxLength": 100 },
+        "formasiGrandDesain": { "type": "string", "maxLength": 100 },
+        "indicatorCode": { "type": "string", "maxLength": 10 },
+        "indicatorTitle": { "type": "string", "maxLength": 150 },
+        "growthLevel": { "type": "string", "enum": ["Mulai Tumbuh", "Berkembang", "Menjadi Teladan"] },
+        "internalScore": { "type": "number" },
+        "nextStepMessage": { "type": "string", "maxLength": 1000 },
+        "feedback": { "type": "string", "maxLength": 1000 },
+        "teacherId": { "type": "string", "maxLength": 128 },
+        "teacherName": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "studentId", "divisionId", "indicatorCode", "growthLevel", "internalScore", "teacherId"]
+    },
+    "SelfAssessment": {
+      "title": "SelfAssessment",
+      "description": "Student self-assessment on the 5 holistic dimensions and 15 indicators",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "studentName": { "type": "string", "maxLength": 128 },
+        "classGroup": { "type": "string", "enum": ["X-1", "X-2", "X-3", "X-4", "X-5", "X-6"] },
+        "primaryDivisionId": { "type": "string", "maxLength": 64 },
+        "secondaryDivisionId": { "type": "string", "maxLength": 64 },
+        "dimensionId": { "type": "string", "maxLength": 64 },
+        "dimensionName": { "type": "string", "maxLength": 100 },
+        "indicatorCode": { "type": "string", "maxLength": 10 },
+        "indicatorTitle": { "type": "string", "maxLength": 150 },
+        "growthLevel": { "type": "string", "enum": ["Mulai Tumbuh", "Berkembang", "Menjadi Teladan"] },
+        "reflectionNote": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "studentId", "indicatorCode", "growthLevel"]
+    },
+    "StudentReflection": {
+      "title": "StudentReflection",
+      "description": "Stage 6 relational reflection filled once across all divisions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "studentName": { "type": "string", "maxLength": 128 },
+        "classGroup": { "type": "string", "enum": ["X-1", "X-2", "X-3", "X-4", "X-5", "X-6"] },
+        "primaryDivisionId": { "type": "string", "maxLength": 64 },
+        "secondaryDivisionId": { "type": "string", "maxLength": 64 },
+        "whoHelpedMeGrow": { "type": "string", "maxLength": 1500 },
+        "whoIHelpedAndHowItFelt": { "type": "string", "maxLength": 1500 },
+        "whenIFeltValued": { "type": "string", "maxLength": 1500 },
+        "whatIAmMostGratefulFor": { "type": "string", "maxLength": 1500 },
+        "whatIWantToImprove": { "type": "string", "maxLength": 1500 },
+        "projectReflectionSummary": { "type": "string", "maxLength": 2000 },
+        "mengalamiCintaNote": { "type": "string", "maxLength": 1500 },
+        "menghidupiCintaNote": { "type": "string", "maxLength": 1500 },
+        "meneruskanCintaNote": { "type": "string", "maxLength": 1500 },
+        "isSubmitted": { "type": "boolean" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "studentId", "isSubmitted"]
+    },
+    "Appreciation": {
+      "title": "Appreciation",
+      "description": "Separated narrative appreciations from teachers, peers, and special contribution mentions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["teacher_appreciation", "peer_appreciation", "special_contribution"] },
+        "toStudentId": { "type": "string", "maxLength": 128 },
+        "toStudentName": { "type": "string", "maxLength": 128 },
+        "toClassGroup": { "type": "string", "enum": ["X-1", "X-2", "X-3", "X-4", "X-5", "X-6"] },
+        "divisionId": { "type": "string", "maxLength": 64 },
+        "divisionName": { "type": "string", "maxLength": 128 },
+        "fromUserId": { "type": "string", "maxLength": 128 },
+        "fromStudentId": { "type": "string", "maxLength": 128 },
+        "fromName": { "type": "string", "maxLength": 128 },
+        "fromRole": { "type": "string", "enum": ["admin", "pendamping", "walikelas", "murid"] },
+        "message": { "type": "string", "maxLength": 2000 },
+        "badgeTitle": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "type", "toStudentId", "fromUserId", "fromRole", "message"]
+    },
+    "HomeroomNote": {
+      "title": "HomeroomNote",
+      "description": "Personal mentoring notes written by Wali Kelas for holistic student accompaniment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "studentName": { "type": "string", "maxLength": 128 },
+        "classGroup": { "type": "string", "enum": ["X-1", "X-2", "X-3", "X-4", "X-5", "X-6"] },
+        "teacherId": { "type": "string", "maxLength": 128 },
+        "teacherName": { "type": "string", "maxLength": 128 },
+        "attitudeNote": { "type": "string", "maxLength": 1500 },
+        "independenceNote": { "type": "string", "maxLength": 1500 },
+        "holisticInvolvementNote": { "type": "string", "maxLength": 1500 },
+        "needsFollowUp": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "studentId", "classGroup", "teacherId"]
+    },
+    "ProgressLog": {
+      "title": "ProgressLog",
+      "description": "Milestone progress tracking across 6 stages with non-judgmental Tersendat/Perlu Sapaan support",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "studentName": { "type": "string", "maxLength": 128 },
+        "classGroup": { "type": "string", "enum": ["X-1", "X-2", "X-3", "X-4", "X-5", "X-6"] },
+        "primaryDivisionId": { "type": "string", "maxLength": 64 },
+        "secondaryDivisionId": { "type": "string", "maxLength": 64 },
+        "stageTitle": { "type": "string", "maxLength": 200 },
+        "stageNumber": { "type": "number" },
+        "description": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["Belum Dimulai", "Sedang Berjalan", "Tersendat / Perlu Sapaan", "Selesai"] },
+        "milestoneDate": { "type": "string", "maxLength": 50 },
+        "artifactsNote": { "type": "string", "maxLength": 500 },
+        "teacherFeedback": { "type": "string", "maxLength": 1000 },
+        "studentReflection": { "type": "string", "maxLength": 1000 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "studentId", "stageTitle", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Authenticated user role and assignment profiles"
+    },
+    "/staffAssignments/{emailKey}": {
+      "schema": { "$ref": "#/entities/StaffAssignment" },
+      "description": "Admin-managed role and division/class assignments for educators"
+    },
+    "/appConfig/{configId}": {
+      "schema": { "$ref": "#/entities/AppConfig" },
+      "description": "System-wide weight and division settings"
+    },
+    "/roleCodes/{codeId}": {
+      "schema": { "$ref": "#/entities/RoleCode" },
+      "description": "Educator onboarding verification codes"
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Master student records X-1 to X-6"
+    },
+    "/divisionPeers/{peerId}": {
+      "schema": { "$ref": "#/entities/DivisionPeer" },
+      "description": "Privacy-safe division teammate directory"
+    },
+    "/assessments/{assessmentId}": {
+      "schema": { "$ref": "#/entities/Assessment" },
+      "description": "Division-scoped formative indicator assessments"
+    },
+    "/selfAssessments/{selfAssessmentId}": {
+      "schema": { "$ref": "#/entities/SelfAssessment" },
+      "description": "Student holistic self-assessments"
+    },
+    "/studentReflections/{reflectionId}": {
+      "schema": { "$ref": "#/entities/StudentReflection" },
+      "description": "One-time Stage 6 relational student reflections"
+    },
+    "/appreciations/{appreciationId}": {
+      "schema": { "$ref": "#/entities/Appreciation" },
+      "description": "Teacher, peer, and special contribution appreciations"
+    },
+    "/homeroomNotes/{noteId}": {
+      "schema": { "$ref": "#/entities/HomeroomNote" },
+      "description": "Wali Kelas personal mentoring notes"
+    },
+    "/progressLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ProgressLog" },
+      "description": "6-stage project timeline and mentoring check-in logs"
+    }
+  }
+}
