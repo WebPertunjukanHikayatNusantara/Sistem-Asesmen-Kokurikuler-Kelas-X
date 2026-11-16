@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react';
 import { SCHOOL_MOTTO } from './types';
 
 const AppContent: React.FC = () => {
-  const { user, loading, activeRole } = useAuth();
+  const { user, profile, profileError, loading, activeRole, logout, retryProfileSync } = useAuth();
 
   if (loading) {
     return (
@@ -41,6 +41,35 @@ const AppContent: React.FC = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {!user ? (
           <LoginPortal />
+        ) : !profile ? (
+          <div className="max-w-lg mx-auto bg-white rounded-2xl border border-rose-200 p-6 sm:p-8 shadow-sm space-y-4 text-center">
+            <h2 className="text-base font-bold text-[#032448]">
+              Profil Peran Akun Belum Dapat Dimuat
+            </h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {profileError ||
+                'Terjadi kendala saat membaca peran akun Anda dari Firestore. Silakan coba muat ulang atau keluar untuk memilih peran kembali.'}
+            </p>
+            <p className="text-[11px] text-slate-500">
+              Akun terhubung: <strong>{user.email}</strong>
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={retryProfileSync}
+                className="px-4 py-2 rounded-xl bg-[#032448] hover:bg-[#1F3A5F] text-white text-xs font-bold cursor-pointer"
+              >
+                Coba Muat Ulang Profil
+              </button>
+              <button
+                type="button"
+                onClick={logout}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+              >
+                Keluar ke Halaman Login
+              </button>
+            </div>
+          </div>
         ) : (
           <StudentProvider>
             {isStudentView ? <StudentPortalView /> : <TeacherDashboard />}

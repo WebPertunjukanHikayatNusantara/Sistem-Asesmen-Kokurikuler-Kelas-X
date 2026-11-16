@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import {
@@ -31,6 +31,7 @@ export interface LoginOptions {
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
+  profileError: string | null;
   loading: boolean;
   realRole: UserRole;
   activeRole: UserRole;
@@ -40,6 +41,7 @@ interface AuthContextType {
   setPreviewContext: (role: UserRole | null, divisionId?: string, classGroup?: ClassGroup) => void;
   clearPreview: () => void;
   loginWithGoogle: (options?: LoginOptions) => Promise<void>;
+  retryProfileSync: () => Promise<void>;
   logout: () => Promise<void>;
   updateProfileData: (data: Partial<UserProfile>) => Promise<void>;
 }
@@ -98,93 +100,115 @@ async function ensureAdminDefaults(adminEmail: string) {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const isManualLoginRef = useRef<boolean>(false);
 
   const [previewRole, setPreviewRole] = useState<UserRole | null>(null);
   const [previewDivisionId, setPreviewDivisionId] = useState<string>(SEVEN_DPK_DIVISIONS[0].id);
   const [previewClassGroup, setPreviewClassGroup] = useState<ClassGroup>('X-1');
 
+  const syncUserFromAuth = async (currentUser: User) => {
+    setProfileError(null);
+    try {
+      const emailLower = (currentUser.email || '').trim().toLowerCase();
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const docSnap = await getDoc(userDocRef);
+
+      let staffData: StaffAssignment | null = null;
+      if (emailLower) {
+        try {
+          const staffSnap = await getDoc(doc(db, 'staffAssignments', emailLower));
+          if (staffSnap.exists()) {
+            staffData = staffSnap.data() as StaffAssignment;
+          }
+        } catch {
+          // Staff assignment may not exist for student accounts
+        }
+      }
+
+      const isBootAdmin = emailLower === BOOTSTRAP_ADMIN_EMAIL;
+
+      if (docSnap.exists()) {
+        let data = docSnap.data() as UserProfile;
+
+        if (isBootAdmin && data.role !== 'admin') {
+          data = { ...data, role: 'admin', canExport: true, updatedAt: new Date().toISOString() };
+          await setDoc(userDocRef, stripUndefined(data), { merge: true });
+        } else if (
+          staffData &&
+          (data.role !== staffData.role ||
+            data.assignedDivisionId !== staffData.assignedDivisionId ||
+            data.assignedClassGroup !== staffData.assignedClassGroup)
+        ) {
+          data = stripUndefined({
+            ...data,
+            role: staffData.role,
+            assignedDivisionId: staffData.assignedDivisionId || data.assignedDivisionId,
+            assignedClassGroup: staffData.assignedClassGroup || data.assignedClassGroup,
+            canExport: staffData.canExport ?? true,
+            updatedAt: new Date().toISOString()
+          });
+          await setDoc(userDocRef, data, { merge: true });
+        }
+
+        setProfile(data);
+        if (data.role === 'admin') {
+          await ensureAdminDefaults(emailLower);
+        }
+      } else {
+        const initialRole: UserRole = isBootAdmin
+          ? 'admin'
+          : staffData
+          ? staffData.role
+          : 'murid';
+
+        const newProfile: UserProfile = stripUndefined({
+          uid: currentUser.uid,
+          email: emailLower,
+          displayName: currentUser.displayName || 'Warga SMA PL Santo Yosef',
+          photoURL: currentUser.photoURL || '',
+          role: initialRole,
+          assignedDivisionId: staffData?.assignedDivisionId,
+          assignedClassGroup: staffData?.assignedClassGroup,
+          classGroup: staffData?.assignedClassGroup || 'X-1',
+          canExport: initialRole === 'admin' || Boolean(staffData?.canExport),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+
+        await setDoc(userDocRef, newProfile);
+        setProfile(newProfile);
+        if (initialRole === 'admin') {
+          await ensureAdminDefaults(emailLower);
+        }
+      }
+    } catch (err: unknown) {
+      console.error('Error fetching or syncing user profile:', err);
+      const rawMsg = err instanceof Error ? err.message : String(err);
+      if (rawMsg.toLowerCase().includes('quota') || rawMsg.toLowerCase().includes('resource-exhausted')) {
+        setProfileError(
+          'Kuota baca harian gratis Firebase Firestore telah habis, sehingga profil peran akun Anda belum dapat dimuat. Tunggu reset kuota esok hari atau upgrade database Firestore di Firebase Console.'
+        );
+      } else {
+        setProfileError('Gagal memuat profil peran akun dari Firestore. Silakan coba muat ulang.');
+      }
+    }
+  };
+
   useEffect(() => {
     testFirestoreConnection();
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (isManualLoginRef.current) {
+        return;
+      }
       setUser(currentUser);
       if (currentUser) {
-        try {
-          const emailLower = (currentUser.email || '').trim().toLowerCase();
-          const userDocRef = doc(db, 'users', currentUser.uid);
-          const docSnap = await getDoc(userDocRef);
-
-          // Check staff assignment if any
-          let staffData: StaffAssignment | null = null;
-          if (emailLower) {
-            try {
-              const staffSnap = await getDoc(doc(db, 'staffAssignments', emailLower));
-              if (staffSnap.exists()) {
-                staffData = staffSnap.data() as StaffAssignment;
-              }
-            } catch {
-              // Staff assignment may not exist for student accounts
-            }
-          }
-
-          const isBootAdmin = emailLower === BOOTSTRAP_ADMIN_EMAIL;
-
-          if (docSnap.exists()) {
-            let data = docSnap.data() as UserProfile;
-
-            // Sync if admin bootstrap or staff assignment upgrades/aligns role
-            if (isBootAdmin && data.role !== 'admin') {
-              data = { ...data, role: 'admin', canExport: true, updatedAt: new Date().toISOString() };
-              await setDoc(userDocRef, stripUndefined(data), { merge: true });
-            } else if (staffData && (data.role !== staffData.role || data.assignedDivisionId !== staffData.assignedDivisionId || data.assignedClassGroup !== staffData.assignedClassGroup)) {
-              data = stripUndefined({
-                ...data,
-                role: staffData.role,
-                assignedDivisionId: staffData.assignedDivisionId || data.assignedDivisionId,
-                assignedClassGroup: staffData.assignedClassGroup || data.assignedClassGroup,
-                canExport: staffData.canExport ?? true,
-                updatedAt: new Date().toISOString()
-              });
-              await setDoc(userDocRef, data, { merge: true });
-            }
-
-            setProfile(data);
-            if (data.role === 'admin') {
-              await ensureAdminDefaults(emailLower);
-            }
-          } else {
-            const initialRole: UserRole = isBootAdmin
-              ? 'admin'
-              : staffData
-              ? staffData.role
-              : 'murid';
-
-            const newProfile: UserProfile = stripUndefined({
-              uid: currentUser.uid,
-              email: emailLower,
-              displayName: currentUser.displayName || 'Warga SMA PL Santo Yosef',
-              photoURL: currentUser.photoURL || '',
-              role: initialRole,
-              assignedDivisionId: staffData?.assignedDivisionId,
-              assignedClassGroup: staffData?.assignedClassGroup,
-              classGroup: staffData?.assignedClassGroup || 'X-1',
-              canExport: initialRole === 'admin' || Boolean(staffData?.canExport),
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            });
-
-            await setDoc(userDocRef, newProfile);
-            setProfile(newProfile);
-            if (initialRole === 'admin') {
-              await ensureAdminDefaults(emailLower);
-            }
-          }
-        } catch (err) {
-          console.error('Error fetching or syncing user profile:', err);
-        }
+        await syncUserFromAuth(currentUser);
       } else {
         setProfile(null);
+        setProfileError(null);
         setPreviewRole(null);
       }
       setLoading(false);
@@ -192,6 +216,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => unsubscribe();
   }, []);
+
+  const retryProfileSync = async () => {
+    if (!auth.currentUser) return;
+    setLoading(true);
+    await syncUserFromAuth(auth.currentUser);
+    setLoading(false);
+  };
 
   const loginWithGoogle = async (options?: LoginOptions) => {
     const {
@@ -201,9 +232,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       accessCode
     } = options || {};
 
+    isManualLoginRef.current = true;
+    setProfileError(null);
     setLoading(true);
+    let googleSignedIn = false;
     try {
       const loggedUser = await signInWithGoogle();
+      googleSignedIn = true;
       const emailLower = (loggedUser.email || '').trim().toLowerCase();
       const userDocRef = doc(db, 'users', loggedUser.uid);
       const docSnap = await getDoc(userDocRef);
@@ -284,13 +319,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw writeErr;
       }
 
+      setUser(loggedUser);
       setProfile(userProfile);
+      setProfileError(null);
       setPreviewRole(null);
 
       if (resolvedRole === 'admin') {
         await ensureAdminDefaults(emailLower);
       }
     } catch (error) {
+      if (googleSignedIn) {
+        // Prevent leaving user half-logged-in with null profile (which previously fell back to Student view)
+        await signOutUser().catch(() => {});
+        setUser(null);
+        setProfile(null);
+      }
       if (isAuthCancellationError(error)) {
         console.info('Google sign-in was cancelled by the user.');
       } else {
@@ -298,6 +341,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       throw error;
     } finally {
+      isManualLoginRef.current = false;
       setLoading(false);
     }
   };
@@ -307,6 +351,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signOutUser();
       setUser(null);
       setProfile(null);
+      setProfileError(null);
       setPreviewRole(null);
     } catch (error) {
       console.error('Failed to sign out:', error);
@@ -328,7 +373,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const realRole: UserRole = profile?.role || 'murid';
+  const realRole: UserRole =
+    profile?.role ||
+    (user?.email?.trim().toLowerCase() === BOOTSTRAP_ADMIN_EMAIL ? 'admin' : 'murid');
   const activeRole: UserRole = realRole === 'admin' && previewRole ? previewRole : realRole;
   const isPreviewing = realRole === 'admin' && previewRole !== null && previewRole !== 'admin';
 
@@ -348,6 +395,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         profile,
+        profileError,
         loading,
         realRole,
         activeRole,
@@ -357,6 +405,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPreviewContext,
         clearPreview,
         loginWithGoogle,
+        retryProfileSync,
         logout,
         updateProfileData
       }}

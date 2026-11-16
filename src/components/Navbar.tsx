@@ -23,9 +23,10 @@ export const Navbar: React.FC = () => {
     logout
   } = useAuth();
 
-  const isStudentView = activeRole === 'murid';
+  const isStudentView = Boolean(profile) && activeRole === 'murid';
 
   const getRoleBadgeLabel = () => {
+    if (!profile) return user ? 'Memverifikasi Peran' : 'Portal Kokurikuler';
     if (activeRole === 'admin') return 'Admin / Koordinator';
     if (activeRole === 'pendamping') {
       const divId = realRole === 'admin' ? previewDivisionId : profile?.assignedDivisionId;
