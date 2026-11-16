@@ -151,7 +151,7 @@ export const AdminManagementView: React.FC = () => {
                 const res = await importOfficialRoster2026();
                 showToast(
                   res.added > 0
-                    ? `Berhasil mengimpor ${res.added} siswa resmi (X-1 s/d X-6) ke Firestore.`
+                    ? `Berhasil mengimpor ${res.added} siswa resmi (X-1 s/d X-6) ke database Supabase.`
                     : `Seluruh 205 siswa resmi (X-1 s/d X-6) sudah tersinkronisasi.`
                 );
               }}

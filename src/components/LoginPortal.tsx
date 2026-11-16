@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { isAuthCancellationError } from '../lib/firebase';
+import { isSupabaseConfigured } from '../lib/supabase';
 import {
   Users,
   BookOpenCheck,
@@ -11,7 +11,8 @@ import {
   KeyRound,
   HeartHandshake,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  Database
 } from 'lucide-react';
 import {
   ClassGroup,
@@ -22,16 +23,21 @@ import {
 } from '../types';
 
 export const LoginPortal: React.FC = () => {
-  const { loginWithGoogle, loading } = useAuth();
+  const { loginWithGoogle, loading, profileError, clearProfileError } = useAuth();
   const [selectedRole, setSelectedRole] = useState<UserRole>('murid');
   const [selectedClass, setSelectedClass] = useState<ClassGroup>('X-1');
   const [selectedDivision, setSelectedDivision] = useState<string>(SEVEN_DPK_DIVISIONS[0].id);
   const [accessCode, setAccessCode] = useState<string>('');
   const [showCode, setShowCode] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isRedirecting, setIsRedirecting] = useState<boolean>(false);
+
+  const displayedError = errorMessage || profileError;
 
   const handleLogin = async () => {
     setErrorMessage(null);
+    clearProfileError();
+    setIsRedirecting(true);
     try {
       await loginWithGoogle({
         intendedRole: selectedRole,
@@ -40,28 +46,10 @@ export const LoginPortal: React.FC = () => {
         accessCode: accessCode.trim() || undefined
       });
     } catch (err: unknown) {
-      if (isAuthCancellationError(err)) {
-        setErrorMessage(null);
-      } else if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'auth/popup-blocked') {
-        setErrorMessage(
-          'Jendela popup diblokir oleh peramban. Harap izinkan popup di peramban Anda untuk melanjutkan login Google.'
-        );
-      } else if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'auth/unauthorized-domain') {
-        setErrorMessage(
-          `Domain (${window.location.hostname}) belum didaftarkan di Firebase Authentication. Tambahkan domain ini di Firebase Console → Authentication → Settings → Authorized domains.`
-        );
-      } else if (
-        err instanceof Error &&
-        (err.message.toLowerCase().includes('quota') || err.message.toLowerCase().includes('resource-exhausted'))
-      ) {
-        setErrorMessage(
-          'Kuota baca harian gratis Firebase Firestore untuk hari ini telah terlampaui. Kuota akan otomatis direset keesokan harinya atau upgrade database di Firebase Console.'
-        );
-      } else {
-        setErrorMessage(
-          err instanceof Error ? err.message : 'Gagal masuk dengan Google. Silakan periksa akun dan coba kembali.'
-        );
-      }
+      setIsRedirecting(false);
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Gagal masuk dengan Google. Silakan periksa akun dan coba kembali.'
+      );
     }
   };
 
@@ -148,10 +136,22 @@ export const LoginPortal: React.FC = () => {
           </div>
         </div>
 
-        {errorMessage && (
+        {!isSupabaseConfigured && (
+          <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-medium flex items-start gap-2.5 max-w-2xl mx-auto">
+            <Database className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold">Database Supabase Belum Terhubung</p>
+              <p className="text-amber-800 leading-relaxed">
+                Lengkapi environment variable <code>VITE_SUPABASE_URL</code> dan <code>VITE_SUPABASE_ANON_KEY</code> pada file <code>.env</code> (lokal) atau <strong>GitHub Actions Repository Secrets</strong>, serta jalankan <code>supabase/schema.sql</code> di SQL Editor Supabase agar tombol login aktif.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {displayedError && (
           <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-start gap-2.5 max-w-2xl mx-auto">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            <span>{errorMessage}</span>
+            <span>{displayedError}</span>
           </div>
         )}
 
@@ -174,6 +174,7 @@ export const LoginPortal: React.FC = () => {
                   onClick={() => {
                     setSelectedRole(card.id);
                     setErrorMessage(null);
+                    clearProfileError();
                   }}
                   className={`text-left p-4 rounded-xl border transition-all cursor-pointer flex items-start gap-3.5 ${
                     active
@@ -278,7 +279,7 @@ export const LoginPortal: React.FC = () => {
 
             <button
               type="button"
-              disabled={loading}
+              disabled={loading || isRedirecting || !isSupabaseConfigured}
               onClick={handleLogin}
               className={`w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 cursor-pointer ${
                 selectedRole === 'murid'
@@ -293,8 +294,8 @@ export const LoginPortal: React.FC = () => {
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
               </svg>
               <span>
-                {loading
-                  ? 'Menghubungkan akun Google...'
+                {loading || isRedirecting
+                  ? 'Mengalihkan ke login Google...'
                   : `Masuk sebagai ${roleCards.find((r) => r.id === selectedRole)?.title} (Gmail)`}
               </span>
             </button>

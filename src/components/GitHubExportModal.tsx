@@ -136,7 +136,7 @@ export const GitHubExportModal: React.FC<GitHubExportModalProps> = ({
             </div>
           </div>
 
-          {/* Langkah 3: Authorized Domains di Firebase */}
+          {/* Langkah 3: Konfigurasi Supabase & GitHub Secrets */}
           <div className="space-y-2">
             <div className="flex items-center space-x-2">
               <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center justify-center text-xs">
@@ -144,25 +144,32 @@ export const GitHubExportModal: React.FC<GitHubExportModalProps> = ({
               </span>
               <h4 className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
                 <Globe className="w-4 h-4 text-amber-700" />
-                Wajib: Daftarkan Domain di Firebase Authentication
+                Wajib: Hubungkan Database Supabase &amp; Login Google
               </h4>
             </div>
-            <div className="ml-8 p-3.5 rounded-xl bg-amber-50 border border-amber-200 space-y-1.5 text-slate-700">
+            <div className="ml-8 p-3.5 rounded-xl bg-amber-50 border border-amber-200 space-y-2 text-slate-700">
               <p>
-                Buka{' '}
+                1. Buat proyek gratis di{' '}
                 <a
-                  href="https://console.firebase.google.com/"
+                  href="https://supabase.com/dashboard"
                   target="_blank"
                   rel="noreferrer"
                   className="text-blue-700 font-bold underline inline-flex items-center gap-0.5"
                 >
-                  Firebase Console <ExternalLink className="w-3 h-3" />
-                </a>{' '}
-                → <strong>Authentication → Settings → Authorized domains</strong>, lalu tambahkan domain hosting Anda (mis. <code>username.github.io</code>) agar Login Google tidak memunculkan error <code>auth/unauthorized-domain</code>.
+                  Supabase Dashboard <ExternalLink className="w-3 h-3" />
+                </a>
+                , buka <strong>SQL Editor</strong> lalu jalankan seluruh isi file <code>supabase/schema.sql</code>.
               </p>
-              <p className="text-[11px] text-slate-600 flex items-center gap-1">
+              <p>
+                2. Di Supabase: aktifkan <strong>Authentication → Providers → Google</strong>, lalu tambahkan URL aplikasi Anda (mis. <code>https://username.github.io/nama-repo/</code>) pada <strong>Authentication → URL Configuration → Redirect URLs</strong>.
+              </p>
+              <p>
+                3. Di GitHub repositori Anda: buka <strong>Settings → Secrets and variables → Actions</strong> lalu tambahkan dua <em>Repository Secrets</em>:{' '}
+                <code>VITE_SUPABASE_URL</code> dan <code>VITE_SUPABASE_ANON_KEY</code> agar build GitHub Actions terhubung ke Supabase.
+              </p>
+              <p className="text-[11px] text-slate-600 flex items-center gap-1 pt-0.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                <span>Gunakan Vercel / Netlify / Firebase Hosting dengan repo Private jika ingin melindungi data siswa dari akses repositori publik.</span>
+                <span>Supabase gratis mendukung PostgreSQL 500 MB &amp; 50.000 MAU tanpa batas kuota baca harian seperti Firestore Spark.</span>
               </p>
             </div>
           </div>

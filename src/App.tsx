@@ -48,7 +48,7 @@ const AppContent: React.FC = () => {
             </h2>
             <p className="text-xs text-slate-600 leading-relaxed">
               {profileError ||
-                'Terjadi kendala saat membaca peran akun Anda dari Firestore. Silakan coba muat ulang atau keluar untuk memilih peran kembali.'}
+                'Terjadi kendala saat membaca peran akun Anda dari database Supabase. Silakan coba muat ulang atau keluar untuk memilih peran kembali.'}
             </p>
             <p className="text-[11px] text-slate-500">
               Akun terhubung: <strong>{user.email}</strong>
@@ -78,10 +78,16 @@ const AppContent: React.FC = () => {
       </main>
 
       <footer className="bg-white border-t border-slate-200 py-5 text-center text-xs text-slate-500 no-print">
-        <div className="max-w-7xl mx-auto px-4 space-y-0.5">
+        <div className="max-w-7xl mx-auto px-4 space-y-1">
           <p className="font-bold text-[#032448] italic">{SCHOOL_MOTTO.full}</p>
           <p>
-            Pendampingan Formasi Holistik Kokurikuler Kelas X • {SCHOOL_MOTTO.schoolName}
+            Pendampingan Formasi Holistik Kokurikuler Kelas X • {SCHOOL_MOTTO.schoolName} •{' '}
+            <a
+              href={`${import.meta.env.BASE_URL}privacy.html`}
+              className="underline hover:text-[#032448]"
+            >
+              Kebijakan Privasi
+            </a>
           </p>
         </div>
       </footer>

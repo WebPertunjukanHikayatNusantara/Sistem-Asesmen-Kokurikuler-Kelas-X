@@ -16,7 +16,7 @@ Aplikasi pendampingan formasi holistik siswa Kelas X (X-1 s/d X-6) **SMA Pangudi
 - Siswa menjadi subjek aktif: memantau prosesnya sendiri, mengisi penilaian diri, menuliskan refleksi relasional, serta mengirim dan menerima apresiasi.
 - Multi-sudut pandang: Guru Pendamping Divisi, Wali Kelas, Diri Sendiri, dan Teman Sedivisi.
 
-### 2. Empat Peran Pengguna & Isolasi Akses (`firestore.rules`)
+### 2. Empat Peran Pengguna & Isolasi Akses (Supabase RLS — `supabase/schema.sql`)
 - **Guru Pendamping Divisi**: Melihat, mendampingi, dan menilai hanya siswa pada divisi yang didampinginya (termasuk siswa lintas kelas dan siswa yang merangkap divisi pendukung).
 - **Wali Kelas (X-1 s/d X-6)**: Melihat seluruh siswa di kelas perwaliannya dari semua divisi dalam mode baca untuk capaian tahap/indikator, serta menulis catatan pendampingan pribadi.
 - **Siswa / Murid**: Menautkan akun Google ke daftar resmi kelas X (205 siswa X-1 s/d X-6), mengisi catatan proses 6 tahap, penilaian diri 15 indikator, apresiasi teman sedivisi, dan refleksi relasional Tahap 6 (diisi 1 kali lintas divisi).
@@ -41,9 +41,24 @@ Aplikasi pendampingan formasi holistik siswa Kelas X (X-1 s/d X-6) **SMA Pangudi
 
 - **Frontend**: React 19 + TypeScript + Vite
 - **Styling**: Tailwind CSS v4
-- **Backend & Database**: Firebase Authentication (Google Sign-In) & Cloud Firestore (`firestore.rules`)
+- **Backend & Database**: Supabase (PostgreSQL + Supabase Auth Google OAuth + Row Level Security)
 - **Icons & Motion**: Lucide React & Motion
 - **Ekspor Data**: SheetJS (`xlsx`)
+
+---
+
+## 🗄️ Setup Database & Login Google (Supabase Gratis)
+
+Aplikasi ini dirancang memakai paket **Supabase Free Tier** (PostgreSQL 500 MB, 50.000 pengguna aktif/bulan, tanpa batas baca harian untuk ~300 siswa & ~20 guru):
+
+1. **Buat Proyek Supabase**: Masuk ke [Supabase Dashboard](https://supabase.com/dashboard) → klik **New Project** (pilih region Singapore agar respons cepat dari Indonesia).
+2. **Buat Tabel & Aturan RLS**: Buka **SQL Editor → New query**, salin seluruh isi file `supabase/schema.sql`, lalu klik **Run**.
+3. **Aktifkan Google Sign-In**:
+   - Buka **Authentication → Providers → Google**, aktifkan dan masukkan *Google OAuth Client ID & Secret* (dari Google Cloud Console dengan Authorized Redirect URI `https://<project-ref>.supabase.co/auth/v1/callback`).
+   - Buka **Authentication → URL Configuration**, atur **Site URL** serta tambahkan ke **Redirect URLs** alamat web Anda (mis. `http://localhost:3000/` untuk lokal dan `https://<username>.github.io/<nama-repo>/` untuk GitHub Pages).
+4. **Isi Environment Variables**:
+   - Untuk lokal: salin `.env.example` menjadi `.env`, lalu isi `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` (dari **Project Settings → API**).
+   - Untuk GitHub Pages: buka **Settings → Secrets and variables → Actions** pada repositori GitHub, tambahkan secret `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY`.
 
 ---
 
@@ -66,33 +81,11 @@ npm run build
 
 ---
 
-## 📤 Cara Memindahkan / Mengunggah ke GitHub
+## 📤 Cara Memindahkan / Mengunggah ke GitHub & GitHub Pages
 
-### Opsi 1 — Langsung dari AI Studio
-Gunakan tombol **GitHub** (atau ikon **Download app**) pada bilah atas antarmuka AI Studio untuk menyimpan repositori langsung ke akun GitHub Anda atau mengunduh paket `.zip`.
-
-### Opsi 2 — Push Manual dari Komputer Lokal
-1. Unduh seluruh kode aplikasi dari AI Studio (ekstrak `.zip` ke folder lokal).
-2. Buat repositori baru kosong di [GitHub](https://github.com/new) (jangan centang *Add a README*).
-3. Jalankan perintah berikut di terminal dalam folder proyek:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit: Symphony of Nusantara"
-   git branch -M main
-   git remote add origin https://github.com/<username-github-anda>/<nama-repo>.git
-   git push -u origin main
-   ```
-
----
-
-## 🔐 Catatan Penting Setelah Pindah ke GitHub / Hosting Baru
-
-1. **Aktifkan GitHub Pages via GitHub Actions** *(jika hosting di GitHub Pages)*:  
-   Buka **Settings → Pages → Build and deployment → Source**, lalu pilih **GitHub Actions** (jangan memilih *Deploy from a branch*, karena source Vite `.tsx` perlu dibuild menjadi `dist/` terlebih dahulu oleh `.github/workflows/deploy.yml`).
-2. **Authorized Domains (Wajib agar Login Google Berfungsi)**:  
-   Jika aplikasi di-hosting di domain baru (mis. `username.github.io`, Vercel, Netlify, atau Firebase Hosting), buka **Firebase Console → Authentication → Settings → Authorized domains**, lalu tambahkan domain hosting tersebut.
-3. **Aturan Keamanan Firestore**:  
-   Pastikan `firestore.rules` ikut dideploy jika Anda berpindah ke proyek Firebase baru (`firebase deploy --only firestore:rules`).
-4. **Konfigurasi Firebase**:  
-   File `firebase-applet-config.json` sudah memuat konfigurasi koneksi proyek Firebase Anda. Pastikan konfigurasi tersebut sesuai dengan proyek Firebase tujuan Anda.
+1. **Aktifkan GitHub Pages via GitHub Actions**:  
+   Buka **Settings → Pages → Build and deployment → Source**, pilih **GitHub Actions** (jangan memilih *Deploy from a branch*, karena source Vite `.tsx` perlu dibuild menjadi `dist/` oleh `.github/workflows/deploy.yml`).
+2. **Tambahkan Repository Secrets**:  
+   Tambahkan `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` di **Settings → Secrets and variables → Actions**.
+3. **Daftarkan Redirect URL di Supabase Auth**:  
+   Tambahkan `https://<username>.github.io/<nama-repo>/` pada **Authentication → URL Configuration → Redirect URLs** di Supabase Dashboard agar Login Google kembali ke aplikasi dengan lancar.

@@ -1,16 +1,16 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
-  auth,
-  db,
-  signInWithGoogle,
+  AuthUser,
+  fromDbStaff,
+  fromDbUser,
+  handleDbError,
+  isSupabaseConfigured,
+  mapSupabaseUser,
+  signInWithGoogleOAuth,
   signOutUser,
-  testFirestoreConnection,
-  handleFirestoreError,
-  OperationType,
-  isAuthCancellationError
-} from '../lib/firebase';
+  supabase,
+  toDbUser
+} from '../lib/supabase';
 import {
   UserProfile,
   UserRole,
@@ -20,6 +20,7 @@ import {
 } from '../types';
 
 export const BOOTSTRAP_ADMIN_EMAIL = 'prasetyoadhitama92@gmail.com';
+const PENDING_LOGIN_STORAGE_KEY = 'son_pending_login_options';
 
 export interface LoginOptions {
   intendedRole?: UserRole;
@@ -29,9 +30,10 @@ export interface LoginOptions {
 }
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   profile: UserProfile | null;
   profileError: string | null;
+  clearProfileError: () => void;
   loading: boolean;
   realRole: UserRole;
   activeRole: UserRole;
@@ -48,114 +50,234 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function stripUndefined<T extends object>(obj: T): T {
-  const result: Record<string, unknown> = {};
-  Object.entries(obj).forEach(([k, v]) => {
-    if (v !== undefined) {
-      result[k] = v;
-    }
-  });
-  return result as T;
-}
-
-async function ensureAdminDefaults(adminEmail: string) {
+function consumePendingLoginOptions(): LoginOptions | null {
   try {
-    const configRef = doc(db, 'appConfig', 'default');
-    const configSnap = await getDoc(configRef);
-    if (!configSnap.exists()) {
-      await setDoc(configRef, {
-        id: 'default',
-        primaryDivisionWeight: 60,
-        secondaryDivisionWeight: 40,
-        allowStudentDivisionSelection: true,
-        updatedBy: adminEmail,
-        updatedAt: new Date().toISOString()
-      });
-    }
-
-    const defaultCodes: { code: string; role: 'admin' | 'pendamping' | 'walikelas'; label: string }[] = [
-      { code: 'PENDAMPING2026', role: 'pendamping', label: 'Kode Guru Pendamping Divisi' },
-      { code: 'WALIKELAS2026', role: 'walikelas', label: 'Kode Wali Kelas X-1 s/d X-6' },
-      { code: 'ADMIN2026', role: 'admin', label: 'Kode Admin / Koordinator' }
-    ];
-
-    for (const item of defaultCodes) {
-      const codeRef = doc(db, 'roleCodes', item.code);
-      const codeSnap = await getDoc(codeRef);
-      if (!codeSnap.exists()) {
-        await setDoc(codeRef, {
-          code: item.code,
-          role: item.role,
-          label: item.label,
-          active: true,
-          updatedAt: new Date().toISOString()
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('Could not initialize admin defaults yet:', err);
+    const raw = sessionStorage.getItem(PENDING_LOGIN_STORAGE_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(PENDING_LOGIN_STORAGE_KEY);
+    return JSON.parse(raw) as LoginOptions;
+  } catch {
+    return null;
   }
 }
 
+function readOAuthUrlError(): string | null {
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashStr = window.location.hash.startsWith('#')
+      ? window.location.hash.slice(1)
+      : window.location.hash;
+    const hashParams = new URLSearchParams(hashStr);
+    const errDesc =
+      searchParams.get('error_description') ||
+      hashParams.get('error_description') ||
+      searchParams.get('error') ||
+      hashParams.get('error');
+    if (errDesc) {
+      // Clean error query/hash from address bar cleanly
+      const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+      window.history.replaceState({}, document.title, cleanUrl);
+      return decodeURIComponent(errDesc.replace(/\+/g, ' '));
+    }
+  } catch {
+    // Ignore URL parsing issues
+  }
+  return null;
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const isManualLoginRef = useRef<boolean>(false);
+  const syncInFlightRef = useRef<string | null>(null);
 
   const [previewRole, setPreviewRole] = useState<UserRole | null>(null);
   const [previewDivisionId, setPreviewDivisionId] = useState<string>(SEVEN_DPK_DIVISIONS[0].id);
   const [previewClassGroup, setPreviewClassGroup] = useState<ClassGroup>('X-1');
 
-  const syncUserFromAuth = async (currentUser: User) => {
+  const clearProfileError = useCallback(() => setProfileError(null), []);
+
+  const syncUserFromSession = useCallback(async (authUser: AuthUser, explicitOptions?: LoginOptions | null) => {
+    if (!supabase) return;
+    if (syncInFlightRef.current === authUser.uid) return;
+    syncInFlightRef.current = authUser.uid;
     setProfileError(null);
+
+    const pendingOptions = explicitOptions !== undefined ? explicitOptions : consumePendingLoginOptions();
+
     try {
-      const emailLower = (currentUser.email || '').trim().toLowerCase();
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      const docSnap = await getDoc(userDocRef);
+      const emailLower = authUser.email.trim().toLowerCase();
+      const isBootAdmin = emailLower === BOOTSTRAP_ADMIN_EMAIL;
+
+      const { data: userRow, error: userSelectError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('uid', authUser.uid)
+        .maybeSingle();
+
+      if (userSelectError) {
+        handleDbError(userSelectError, 'select', 'users');
+      }
+
+      const existingData: UserProfile | null = userRow ? fromDbUser(userRow) : null;
 
       let staffData: StaffAssignment | null = null;
       if (emailLower) {
-        try {
-          const staffSnap = await getDoc(doc(db, 'staffAssignments', emailLower));
-          if (staffSnap.exists()) {
-            staffData = staffSnap.data() as StaffAssignment;
-          }
-        } catch {
-          // Staff assignment may not exist for student accounts
+        const { data: staffRow } = await supabase
+          .from('staff_assignments')
+          .select('*')
+          .eq('email', emailLower)
+          .maybeSingle();
+        if (staffRow) {
+          staffData = fromDbStaff(staffRow);
         }
       }
 
-      const isBootAdmin = emailLower === BOOTSTRAP_ADMIN_EMAIL;
+      const now = new Date().toISOString();
 
-      if (docSnap.exists()) {
-        let data = docSnap.data() as UserProfile;
+      if (pendingOptions && pendingOptions.intendedRole) {
+        const {
+          intendedRole,
+          preferredDivisionId,
+          preferredClass = 'X-1',
+          accessCode
+        } = pendingOptions;
 
-        if (isBootAdmin && data.role !== 'admin') {
-          data = { ...data, role: 'admin', canExport: true, updatedAt: new Date().toISOString() };
-          await setDoc(userDocRef, stripUndefined(data), { merge: true });
+        let resolvedRole: UserRole = intendedRole;
+        if (isBootAdmin && intendedRole === 'admin') {
+          resolvedRole = 'admin';
+        } else if (staffData && staffData.role === intendedRole) {
+          resolvedRole = staffData.role;
+        } else if (
+          (intendedRole === 'pendamping' || intendedRole === 'walikelas' || intendedRole === 'admin') &&
+          !isBootAdmin &&
+          existingData?.role !== intendedRole
+        ) {
+          if (!accessCode || !accessCode.trim()) {
+            await signOutUser().catch(() => {});
+            setUser(null);
+            setProfile(null);
+            setProfileError(
+              'Peran pendidik/admin memerlukan Kode Otorisasi atau penugasan email oleh Admin (Pak Tio / Koordinator).'
+            );
+            return;
+          }
+        }
+
+        const resolvedDivisionId =
+          resolvedRole === 'pendamping'
+            ? staffData?.assignedDivisionId ||
+              preferredDivisionId ||
+              existingData?.assignedDivisionId ||
+              SEVEN_DPK_DIVISIONS[0].id
+            : existingData?.assignedDivisionId;
+
+        const resolvedClassGroup =
+          resolvedRole === 'walikelas'
+            ? staffData?.assignedClassGroup ||
+              preferredClass ||
+              existingData?.assignedClassGroup ||
+              'X-1'
+            : existingData?.assignedClassGroup;
+
+        const desiredProfile: UserProfile = {
+          uid: authUser.uid,
+          email: emailLower,
+          displayName: authUser.displayName || 'Warga Sekolah',
+          photoURL: authUser.photoURL || '',
+          role: resolvedRole,
+          assignedDivisionId: resolvedDivisionId,
+          secondaryDivisionId: existingData?.secondaryDivisionId || '',
+          assignedClassGroup: resolvedClassGroup,
+          studentId: existingData?.studentId,
+          classGroup: preferredClass || existingData?.classGroup || 'X-1',
+          nisn: existingData?.nisn,
+          canExport:
+            resolvedRole === 'admin' ||
+            resolvedRole === 'pendamping' ||
+            resolvedRole === 'walikelas' ||
+            Boolean(staffData?.canExport),
+          inviteCode: accessCode ? accessCode.trim().toUpperCase() : existingData?.inviteCode,
+          createdAt: existingData?.createdAt || now,
+          updatedAt: now
+        };
+
+        const { data: upsertedRow, error: upsertError } = await supabase
+          .from('users')
+          .upsert(toDbUser(desiredProfile), { onConflict: 'uid' })
+          .select('*')
+          .single();
+
+        if (upsertError) {
+          const msg = (upsertError.message || '').toLowerCase();
+          if (
+            upsertError.code === '42501' ||
+            msg.includes('row-level security') ||
+            msg.includes('permission')
+          ) {
+            await signOutUser().catch(() => {});
+            setUser(null);
+            setProfile(null);
+            setProfileError(
+              'Kode otorisasi tidak cocok atau email Anda belum terdaftar untuk peran tersebut. Hubungi Admin (Pak Tio / Koordinator).'
+            );
+            return;
+          }
+          handleDbError(upsertError, 'upsert', 'users');
+        }
+
+        setUser(authUser);
+        setProfile(fromDbUser(upsertedRow));
+        setPreviewRole(null);
+        return;
+      }
+
+      // Normal session restore (no pending login options)
+      if (existingData) {
+        let updatedData = existingData;
+
+        if (isBootAdmin && existingData.role !== 'admin') {
+          const patched = { ...existingData, role: 'admin' as UserRole, canExport: true, updatedAt: now };
+          const { data: savedRow, error: updErr } = await supabase
+            .from('users')
+            .update(toDbUser({ role: 'admin', canExport: true, updatedAt: now }))
+            .eq('uid', authUser.uid)
+            .select('*')
+            .single();
+          if (!updErr && savedRow) {
+            updatedData = fromDbUser(savedRow);
+          } else {
+            updatedData = patched;
+          }
         } else if (
           staffData &&
-          (data.role !== staffData.role ||
-            data.assignedDivisionId !== staffData.assignedDivisionId ||
-            data.assignedClassGroup !== staffData.assignedClassGroup)
+          (existingData.role !== staffData.role ||
+            existingData.assignedDivisionId !== staffData.assignedDivisionId ||
+            existingData.assignedClassGroup !== staffData.assignedClassGroup)
         ) {
-          data = stripUndefined({
-            ...data,
+          const nextPatch: Partial<UserProfile> = {
             role: staffData.role,
-            assignedDivisionId: staffData.assignedDivisionId || data.assignedDivisionId,
-            assignedClassGroup: staffData.assignedClassGroup || data.assignedClassGroup,
+            assignedDivisionId: staffData.assignedDivisionId || existingData.assignedDivisionId,
+            assignedClassGroup: staffData.assignedClassGroup || existingData.assignedClassGroup,
             canExport: staffData.canExport ?? true,
-            updatedAt: new Date().toISOString()
-          });
-          await setDoc(userDocRef, data, { merge: true });
+            updatedAt: now
+          };
+          const { data: savedRow, error: updErr } = await supabase
+            .from('users')
+            .update(toDbUser(nextPatch))
+            .eq('uid', authUser.uid)
+            .select('*')
+            .single();
+          if (!updErr && savedRow) {
+            updatedData = fromDbUser(savedRow);
+          } else {
+            updatedData = { ...existingData, ...nextPatch };
+          }
         }
 
-        setProfile(data);
-        if (data.role === 'admin') {
-          await ensureAdminDefaults(emailLower);
-        }
+        setUser(authUser);
+        setProfile(updatedData);
       } else {
         const initialRole: UserRole = isBootAdmin
           ? 'admin'
@@ -163,191 +285,148 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ? staffData.role
           : 'murid';
 
-        const newProfile: UserProfile = stripUndefined({
-          uid: currentUser.uid,
+        const newProfile: UserProfile = {
+          uid: authUser.uid,
           email: emailLower,
-          displayName: currentUser.displayName || 'Warga SMA PL Santo Yosef',
-          photoURL: currentUser.photoURL || '',
+          displayName: authUser.displayName || 'Warga SMA PL Santo Yosef',
+          photoURL: authUser.photoURL || '',
           role: initialRole,
           assignedDivisionId: staffData?.assignedDivisionId,
+          secondaryDivisionId: '',
           assignedClassGroup: staffData?.assignedClassGroup,
           classGroup: staffData?.assignedClassGroup || 'X-1',
           canExport: initialRole === 'admin' || Boolean(staffData?.canExport),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
+          createdAt: now,
+          updatedAt: now
+        };
 
-        await setDoc(userDocRef, newProfile);
-        setProfile(newProfile);
-        if (initialRole === 'admin') {
-          await ensureAdminDefaults(emailLower);
+        const { data: insertedRow, error: insError } = await supabase
+          .from('users')
+          .upsert(toDbUser(newProfile), { onConflict: 'uid' })
+          .select('*')
+          .single();
+
+        if (insError) {
+          handleDbError(insError, 'insert', 'users');
         }
+
+        setUser(authUser);
+        setProfile(fromDbUser(insertedRow));
       }
     } catch (err: unknown) {
-      console.error('Error fetching or syncing user profile:', err);
+      console.error('Error syncing Supabase user profile:', err);
       const rawMsg = err instanceof Error ? err.message : String(err);
-      if (rawMsg.toLowerCase().includes('quota') || rawMsg.toLowerCase().includes('resource-exhausted')) {
-        setProfileError(
-          'Kuota baca harian gratis Firebase Firestore telah habis, sehingga profil peran akun Anda belum dapat dimuat. Tunggu reset kuota esok hari atau upgrade database Firestore di Firebase Console.'
-        );
-      } else {
-        setProfileError('Gagal memuat profil peran akun dari Firestore. Silakan coba muat ulang.');
+      setUser(authUser);
+      setProfile(null);
+      setProfileError(
+        rawMsg || 'Gagal memuat profil peran akun dari Supabase. Silakan coba muat ulang.'
+      );
+    } finally {
+      syncInFlightRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const urlOAuthErr = readOAuthUrlError();
+    if (urlOAuthErr) {
+      consumePendingLoginOptions();
+      setProfileError(`Login Google dibatalkan atau gagal: ${urlOAuthErr}`);
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(false);
+      return;
+    }
+
+    supabase.auth
+      .getSession()
+      .then(async ({ data: { session }, error }) => {
+        if (!isMounted) return;
+        if (error) {
+          console.error('Supabase getSession error:', error);
+          setProfileError(error.message);
+          setLoading(false);
+          return;
+        }
+        if (session?.user) {
+          await syncUserFromSession(mapSupabaseUser(session.user));
+        } else {
+          setUser(null);
+          setProfile(null);
+        }
+        if (isMounted) setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Unexpected getSession failure:', err);
+        if (isMounted) setLoading(false);
+      });
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        setUser(null);
+        setProfile(null);
+        setPreviewRole(null);
+        setLoading(false);
+        return;
       }
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        await syncUserFromSession(mapSupabaseUser(session.user));
+        if (isMounted) setLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [syncUserFromSession]);
+
+  const retryProfileSync = async () => {
+    if (!supabase) return;
+    setLoading(true);
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) {
+        await syncUserFromSession(mapSupabaseUser(data.user), null);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
-  useEffect(() => {
-    testFirestoreConnection();
-
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (isManualLoginRef.current) {
-        return;
-      }
-      setUser(currentUser);
-      if (currentUser) {
-        await syncUserFromAuth(currentUser);
-      } else {
-        setProfile(null);
-        setProfileError(null);
-        setPreviewRole(null);
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const retryProfileSync = async () => {
-    if (!auth.currentUser) return;
-    setLoading(true);
-    await syncUserFromAuth(auth.currentUser);
-    setLoading(false);
-  };
-
   const loginWithGoogle = async (options?: LoginOptions) => {
-    const {
-      intendedRole = 'murid',
-      preferredDivisionId,
-      preferredClass = 'X-1',
-      accessCode
-    } = options || {};
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error(
+        'Koneksi Supabase belum dikonfigurasi. Lengkapi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY pada environment build.'
+      );
+    }
 
-    isManualLoginRef.current = true;
     setProfileError(null);
-    setLoading(true);
-    let googleSignedIn = false;
+    const payload: LoginOptions = {
+      intendedRole: options?.intendedRole || 'murid',
+      preferredDivisionId: options?.preferredDivisionId,
+      preferredClass: options?.preferredClass || 'X-1',
+      accessCode: options?.accessCode
+    };
+
     try {
-      const loggedUser = await signInWithGoogle();
-      googleSignedIn = true;
-      const emailLower = (loggedUser.email || '').trim().toLowerCase();
-      const userDocRef = doc(db, 'users', loggedUser.uid);
-      const docSnap = await getDoc(userDocRef);
-
-      let staffData: StaffAssignment | null = null;
-      if (emailLower) {
-        try {
-          const staffSnap = await getDoc(doc(db, 'staffAssignments', emailLower));
-          if (staffSnap.exists()) {
-            staffData = staffSnap.data() as StaffAssignment;
-          }
-        } catch {
-          // No pre-assigned staff record
-        }
-      }
-
-      const isBootAdmin = emailLower === BOOTSTRAP_ADMIN_EMAIL;
-      const existingData = docSnap.exists() ? (docSnap.data() as UserProfile) : null;
-
-      let resolvedRole: UserRole = intendedRole;
-      if (isBootAdmin && intendedRole === 'admin') {
-        resolvedRole = 'admin';
-      } else if (staffData && staffData.role === intendedRole) {
-        resolvedRole = staffData.role;
-      } else if (
-        (intendedRole === 'pendamping' || intendedRole === 'walikelas' || intendedRole === 'admin') &&
-        !isBootAdmin &&
-        existingData?.role !== intendedRole
-      ) {
-        if (!accessCode || !accessCode.trim()) {
-          throw new Error(
-            'Peran pendidik/admin memerlukan Kode Otorisasi atau penugasan email oleh Admin (Pak Tio / Koordinator).'
-          );
-        }
-      }
-
-      const resolvedDivisionId =
-        resolvedRole === 'pendamping'
-          ? staffData?.assignedDivisionId || preferredDivisionId || existingData?.assignedDivisionId || SEVEN_DPK_DIVISIONS[0].id
-          : existingData?.assignedDivisionId;
-
-      const resolvedClassGroup =
-        resolvedRole === 'walikelas'
-          ? staffData?.assignedClassGroup || preferredClass || existingData?.assignedClassGroup || 'X-1'
-          : existingData?.assignedClassGroup;
-
-      const userProfile: UserProfile = stripUndefined({
-        uid: loggedUser.uid,
-        email: emailLower,
-        displayName: loggedUser.displayName || 'Warga Sekolah',
-        photoURL: loggedUser.photoURL || '',
-        role: resolvedRole,
-        assignedDivisionId: resolvedDivisionId,
-        secondaryDivisionId: existingData?.secondaryDivisionId,
-        assignedClassGroup: resolvedClassGroup,
-        studentId: existingData?.studentId,
-        classGroup: preferredClass || existingData?.classGroup || 'X-1',
-        nisn: existingData?.nisn,
-        canExport:
-          resolvedRole === 'admin' ||
-          resolvedRole === 'pendamping' ||
-          resolvedRole === 'walikelas' ||
-          Boolean(staffData?.canExport),
-        inviteCode: accessCode ? accessCode.trim().toUpperCase() : existingData?.inviteCode,
-        updatedAt: new Date().toISOString(),
-        ...(existingData ? {} : { createdAt: new Date().toISOString() })
-      });
-
-      try {
-        await setDoc(userDocRef, userProfile, { merge: true });
-      } catch (writeErr: unknown) {
-        const msg = writeErr instanceof Error ? writeErr.message : String(writeErr);
-        if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('insufficient')) {
-          throw new Error(
-            'Kode otorisasi tidak cocok atau email Anda belum terdaftar untuk peran tersebut. Hubungi Admin (Pak Tio / Koordinator).'
-          );
-        }
-        throw writeErr;
-      }
-
-      setUser(loggedUser);
-      setProfile(userProfile);
-      setProfileError(null);
-      setPreviewRole(null);
-
-      if (resolvedRole === 'admin') {
-        await ensureAdminDefaults(emailLower);
-      }
-    } catch (error) {
-      if (googleSignedIn) {
-        // Prevent leaving user half-logged-in with null profile (which previously fell back to Student view)
-        await signOutUser().catch(() => {});
-        setUser(null);
-        setProfile(null);
-      }
-      if (isAuthCancellationError(error)) {
-        console.info('Google sign-in was cancelled by the user.');
-      } else {
-        console.error('Failed to sign in with Google:', error);
-      }
-      throw error;
-    } finally {
-      isManualLoginRef.current = false;
-      setLoading(false);
+      sessionStorage.setItem(PENDING_LOGIN_STORAGE_KEY, JSON.stringify(payload));
+      await signInWithGoogleOAuth();
+    } catch (err) {
+      sessionStorage.removeItem(PENDING_LOGIN_STORAGE_KEY);
+      throw err;
     }
   };
 
   const logout = async () => {
     try {
+      sessionStorage.removeItem(PENDING_LOGIN_STORAGE_KEY);
       await signOutUser();
       setUser(null);
       setProfile(null);
@@ -359,17 +438,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateProfileData = async (data: Partial<UserProfile>) => {
-    if (!user) return;
+    if (!user || !supabase) return;
     try {
-      const userDocRef = doc(db, 'users', user.uid);
-      const updated = stripUndefined({
-        ...data,
-        updatedAt: new Date().toISOString()
-      });
-      await updateDoc(userDocRef, updated);
-      setProfile((prev) => (prev ? { ...prev, ...updated } : null));
+      const now = new Date().toISOString();
+      const dbPatch = toDbUser({ ...data, updatedAt: now });
+      const { error } = await supabase.from('users').update(dbPatch).eq('uid', user.uid);
+      if (error) {
+        handleDbError(error, 'update', `users/${user.uid}`);
+      }
+      setProfile((prev) => (prev ? { ...prev, ...data, updatedAt: now } : null));
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      handleDbError(error, 'update', `users/${user.uid}`);
     }
   };
 
@@ -396,6 +475,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         profile,
         profileError,
+        clearProfileError,
         loading,
         realRole,
         activeRole,
